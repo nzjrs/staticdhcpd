@@ -32,6 +32,8 @@ Legal
 #   The chosen module is accessible via the module-level SQL_MODULE variable   #
 ################################################################################
 import threading
+import StringIO
+import ConfigParser
 
 import src.conf_buffer as conf
 import src.logging
@@ -367,7 +369,53 @@ class _SQLite(_NonPoolingBroker):
         }
         
         self._setupBroker(1)
-        
+
+class _INIDB(object):
+
+    def __init__(self, *args, **kwargs):
+        self.flushCache()
+
+    def flushCache(self):
+        if conf.USE_CACHE:
+            self._cfg = ConfigParser.ConfigParser(allow_no_value=True)
+            self._cfg.read(conf.INI_PATH)
+
+    def lookupMAC(self, mac):
+        if conf.USE_CACHE:
+            cfg = self._cfg
+        else:
+            cfg = ConfigParser.ConfigParser(allow_no_value=True)
+            cfg.read(conf.INI_PATH)
+
+        if not cfg.has_section(mac):
+            return None
+
+        ip          = cfg.get(mac,"ip")
+        hostname    = cfg.get(mac,"hostname")
+        gateway     = cfg.get(mac,"gateway")
+        subnet_mask = cfg.get(mac,"subnet_mask")
+        broadcast_address = cfg.get(mac, "broadcast_address")
+        domain_name = cfg.get(mac, "domain_name")
+        domain_name_servers = cfg.get(mac, "domain_name_servers")
+        ntp_servers = cfg.get(mac, "ntp_servers")
+        lease_time  = cfg.getint(mac, "lease_time")
+        subnet      = cfg.get(mac, "subnet")
+        serial      = cfg.getint(mac, "serial")
+
+        if conf.INI_FILE_READ_HOSTS:
+            with open('/etc/hosts') as hosts:
+                for line in hosts:
+                    line = line.strip()
+                    if line and line[0] != '#':
+                        _ip, _hostname = line.split(None)[0:2]
+                        if _ip.strip() == ip:
+                            hostname = _hostname.strip()
+                            src.logging.writeLog("Assigned hostname from /etc/hosts")
+
+        return ip, hostname, gateway, subnet_mask,\
+               broadcast_address, domain_name, domain_name_servers,\
+               ntp_servers, lease_time,\
+               subnet, serial
         
 #Decide which SQL engine to use and store the class in SQL_BROKER
 #################################################################
@@ -385,6 +433,8 @@ elif conf.DATABASE_ENGINE == 'Oracle':
 elif conf.DATABASE_ENGINE == 'SQLite':
     import sqlite3 as SQL_MODULE
     SQL_BROKER = _SQLite
+elif conf.DATABASE_ENGINE == 'INI':
+    SQL_BROKER = _INIDB
 else:
     raise ValueError("Unknown database engine: %(engine)s" % {
      'engine': conf.DATABASE_ENGINE

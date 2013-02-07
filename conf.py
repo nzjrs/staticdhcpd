@@ -147,6 +147,12 @@ ORACLE_MAXIMUM_CONNECTIONS = 4
 #The file that contains your SQLite database.
 SQLITE_FILE = '/etc/staticDHCPd/dhcp.sqlite3'
 
+#INI_* values only used with the 'INI' 'engine'.
+#Read /etc/hosts/ and assign hostname from that (good for coexisting with dnsmasq)
+INI_FILE_READ_HOSTS = True
+#Path to ini file. See samples/addresses.ini for an example
+INI_PATH = '/etc/staticDHCPd/addresses.ini'
+
 #E-mail settings
 #######################################
 #True to allow staticDHCPd to inform you of any problems it cannot handle by
