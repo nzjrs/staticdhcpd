@@ -8,7 +8,7 @@
 #General settings
 #######################################
 #If True, all events will be printed to console.
-DEBUG = True
+DEBUG = False
 #If True, runs as a daemon (you usually don't want this during setup)
 DAEMON = False
 
