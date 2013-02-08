@@ -28,6 +28,10 @@ import os
 import signal
 import sys
 import time
+import sys
+
+me = os.path.dirname(os.path.abspath(__file__))
+sys.path.insert(0, me)
 
 import src.conf_buffer as conf
 import src.dhcp
