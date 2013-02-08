@@ -92,8 +92,8 @@ if __name__ == '__main__':
     #Ensure that pre-setup tasks are taken care of.
     conf.init()
 	
-	if conf.DAEMON:
-		_daemonise()
+    if conf.DAEMON:
+        _daemonise()
 		
     #Start Web server.
     if conf.WEB_ENABLED:
