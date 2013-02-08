@@ -148,8 +148,14 @@ ORACLE_MAXIMUM_CONNECTIONS = 4
 SQLITE_FILE = '/etc/staticDHCPd/dhcp.sqlite3'
 
 #INI_* values only used with the 'INI' 'engine'.
-#Read /etc/hosts/ and assign hostname from that (good for coexisting with dnsmasq)
-INI_FILE_READ_HOSTS = True
+#Write a /etc/hosts/ formatted file to this location for those MAC addresses
+#with a defined IP and hostname
+INI_FILE_WRITE_HOSTS_FILE_ALL = '/tmp/hosts'
+#Signal this PID when a new HOSTS_FILE is written. If this is an integer, signal
+#this integer, if it is a path, interpret it as a PID file
+INI_FILE_SIGNAL_PID = 123
+#Send this signal to the process with PID
+INI_FILE_SIGNAL_NAME = "SIGHUP"
 #Path to ini file. See samples/addresses.ini for an example
 INI_PATH = '/etc/staticDHCPd/addresses.ini'
 
