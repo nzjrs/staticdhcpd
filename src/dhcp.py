@@ -759,6 +759,8 @@ class _DHCPServer(libpydhcpserver.dhcp_network.DHCPNetwork):
             port = self._client_port
             
         packet.setOption('server_identifier', ipToList(self._server_address))
+        packet.setOption('siaddr', ipToList(self._server_address))
+
         bytes = self._sendDHCPPacketTo(packet, ip, port, pxe)
         src.logging.writeLog('DHCP%(type)s sent to %(mac)s for %(client)s via %(ip)s:%(port)i %(pxe)s[%(bytes)i bytes]' % {
              'type': response_type,
