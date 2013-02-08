@@ -153,7 +153,7 @@ SQLITE_FILE = '/etc/staticDHCPd/dhcp.sqlite3'
 INI_FILE_WRITE_HOSTS_FILE_ALL = '/etc/hosts.dhcp'
 #Signal this PID when a new HOSTS_FILE is written. If this is an integer, signal
 #this integer, if it is a path, interpret it as a PID file
-INI_FILE_SIGNAL_PID = 123
+INI_FILE_SIGNAL_PID = '/var/run/dnsmasq/dnsmasq.pid'
 #Send this signal to the process with PID
 INI_FILE_SIGNAL_NAME = "SIGHUP"
 #Path to ini file. See samples/addresses.ini for an example
@@ -215,11 +215,24 @@ def loadDHCPPacket(packet, mac, client_ip, relay_ip, subnet, serial, pxe, vendor
     #    [(enterprise_number:int, data:string)] and
     #    [(enterprise_number:int, [(subopt_code:byte, data:string)])],
     #    respectively. Any unset options are presented as None.
-    if client_ip and client_ip[2] == 25:
-        packet.setOption('renewal_time_value', longToList(1500))
-        packet.setOption('rebinding_time_value', longToList(2625))
-        packet.setOption('server_identifier',ipToList('192.168.25.0'))
-        print packet, vendor
+    if mac.startswith("00:30:53"):
+        #remove the gateway etc
+        packet.deleteOption('gateway')
+        packet.deleteOption('domain_name')
+        packet.deleteOption('domain_name_servers')
+        writeLog("Conf.py: basler camera detected, removing gateway")
+
+    if not packet.isOption('broadcast_address'):
+        bc = list(client_ip)
+        bc[-1] = 255
+        writeLog("Conf.py: setting broadcast_address for %r to %r" % (client_ip, bc))
+        packet.setOption('broadcast_address', bc)
+
+    if not packet.isOption('subnet_mask'):
+        a = [255,255,255,0]
+        writeLog("Conf.py: setting subnet_mask for %r to %r" % (client_ip, a))
+        packet.setOption('subnet_mask', a)
+
     return True
     
 def handleUnknownMAC(mac):
