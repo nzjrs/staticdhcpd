@@ -8,9 +8,9 @@
 #General settings
 #######################################
 #If True, all events will be printed to console.
-DEBUG = False
+DEBUG = True
 #If True, runs as a daemon (you usually don't want this during setup)
-DAEMON = True
+DAEMON = False
 
 #The name to use when referring to this system.
 SYSTEM_NAME = 'staticDHCPd'
@@ -32,13 +32,13 @@ POLL_INTERVALS_TO_TRACK = 20
 #Server settings
 #######################################
 #The UID that will run this daemon.
-UID = 99
+UID = 0
 #The GID that will run this daemon.
-GID = 99
+GID = 0
 
 #The IP of the interface on which DHCP responses should be sent.
 #This value must be set to a real IP.
-DHCP_SERVER_IP = '192.168.1.100'
+DHCP_SERVER_IP = '192.168.1.1'
 #The port on which DHCP requests are to be received; 67 is the standard.
 DHCP_SERVER_PORT = 67
 #The port on which clients wait for DHCP responses; 68 is the standard.
@@ -51,7 +51,7 @@ PXE_PORT = None
 WEB_ENABLED = True
 #The IP of the interface on which the HTTP interface should be served.
 #Use '0.0.0.0' to serve on all interfaces.
-WEB_IP = '192.168.1.100'
+WEB_IP = '192.168.1.1'
 #The port on which the HTTP interface should be served.
 WEB_PORT = 30880
 
@@ -78,7 +78,7 @@ UNAUTHORIZED_CLIENT_TIMEOUT = 60
 #The number of seconds for which to ignore potentially malicious MACs.
 MISBEHAVING_CLIENT_TIMEOUT = 150
 #If True, MACs requesting too many addresses will be flagged as malicious.
-ENABLE_SUSPEND = True
+ENABLE_SUSPEND = False
 #The number of times a well-behaved MAC can search for or request an IP
 #within the polling interval.
 SUSPEND_THRESHOLD = 10
@@ -89,7 +89,7 @@ WEB_RELOAD_KEY = '5f4dcc3b5aa765d61d8327deb882cf99'
 #Database settings
 #######################################
 #Allowed values: MySQL, PostgreSQL, Oracle, SQLite
-DATABASE_ENGINE = 'MySQL'
+DATABASE_ENGINE = 'INI'
 
 #Controls whether DHCP data gleaned from database lookups should be cached until
 #manually flushed; consumes more resources and adds a step before a MAC can be
@@ -150,14 +150,14 @@ SQLITE_FILE = '/etc/staticDHCPd/dhcp.sqlite3'
 #INI_* values only used with the 'INI' 'engine'.
 #Write a /etc/hosts/ formatted file to this location for those MAC addresses
 #with a defined IP and hostname
-INI_FILE_WRITE_HOSTS_FILE_ALL = '/tmp/hosts'
+INI_FILE_WRITE_HOSTS_FILE_ALL = '/etc/hosts.dhcp'
 #Signal this PID when a new HOSTS_FILE is written. If this is an integer, signal
 #this integer, if it is a path, interpret it as a PID file
 INI_FILE_SIGNAL_PID = 123
 #Send this signal to the process with PID
 INI_FILE_SIGNAL_NAME = "SIGHUP"
 #Path to ini file. See samples/addresses.ini for an example
-INI_PATH = '/etc/staticDHCPd/addresses.ini'
+INI_PATH = '/etc/hosts.ini'
 
 #E-mail settings
 #######################################
@@ -215,6 +215,11 @@ def loadDHCPPacket(packet, mac, client_ip, relay_ip, subnet, serial, pxe, vendor
     #    [(enterprise_number:int, data:string)] and
     #    [(enterprise_number:int, [(subopt_code:byte, data:string)])],
     #    respectively. Any unset options are presented as None.
+    if client_ip and client_ip[2] == 25:
+        packet.setOption('renewal_time_value', longToList(1500))
+        packet.setOption('rebinding_time_value', longToList(2625))
+        packet.setOption('server_identifier',ipToList('192.168.25.0'))
+        print packet, vendor
     return True
     
 def handleUnknownMAC(mac):
