@@ -8,7 +8,7 @@
 #General settings
 #######################################
 #If True, all events will be printed to console.
-DEBUG = False
+DEBUG = True
 #If True, runs as a daemon (you usually don't want this during setup)
 DAEMON = False
 
@@ -215,6 +215,10 @@ def loadDHCPPacket(packet, mac, client_ip, relay_ip, subnet, serial, pxe, vendor
     #    [(enterprise_number:int, data:string)] and
     #    [(enterprise_number:int, [(subopt_code:byte, data:string)])],
     #    respectively. Any unset options are presented as None.
+
+    #I use subnet as a set of tags, not as a single identifier
+    tags = subnet.split(',')
+
     if mac.startswith("00:30:53"):
         #remove the gateway etc
         packet.deleteOption('gateway')
@@ -232,6 +236,12 @@ def loadDHCPPacket(packet, mac, client_ip, relay_ip, subnet, serial, pxe, vendor
         a = [255,255,255,0]
         writeLog("Conf.py: setting subnet_mask for %r to %r" % (client_ip, a))
         packet.setOption('subnet_mask', a)
+
+    for t in tags:
+        if t.startswith("mtu"):
+            mtu = int(t[3:])
+            writeLog("Conf.py: set MTU = %d" % mtu)
+            packet.setOption('interface_mtu', intToList(mtu))
 
     return True
     
