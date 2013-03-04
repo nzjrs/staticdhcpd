@@ -27,6 +27,7 @@ Legal
 import select
 import threading
 import time
+import collections
 
 import src.conf_buffer as conf
 import src.logging
@@ -63,8 +64,10 @@ class _DHCPServer(libpydhcpserver.dhcp_network.DHCPNetwork):
     _sql_broker = None #: The SQL broker to be used when handling MAC lookups.
     
     _stats_lock = None #: A lock used to ensure synchronous access to performance statistics.
-    _dhcp_assignments = None #: The MACs and the number of DHCP "leases" granted to each since the last polling interval.
-    _ignored_addresses = None #: A list of all MACs currently ignored, plus the time remaining until requests will be honoured again.
+    _stats = None #: A list of 5-tuples (time, n_processed, n_discarded, time_taken, n_ignored) of performance statistics
+    _dhcp_assignments = None #: A dict mac :(ip, time_before_renewal) for all active assignments
+    _dhcp_accesses = None #: The MACs and the number of DHCP "leases" granted to each since the last polling interval.
+    _ignored_addresses = None #: A list of (mac, time_remaining) of all MACs currently ignored, plus the time remaining until requests will be honoured again.
     _packets_discarded = 0 #: The number of packets discarded since the last polling interval.
     _packets_processed = 0 #: The number of packets processed since the last polling interval.
     _time_taken = 0.0 #: The amount of time taken since the last polling interval.
@@ -90,8 +93,10 @@ class _DHCPServer(libpydhcpserver.dhcp_network.DHCPNetwork):
             required to process DHCP messages.
         """
         self._stats_lock = threading.Lock()
-        self._dhcp_assignments = {}
+        self._dhcp_accesses = {}
+        self._dhcp_assignments = collections.OrderedDict()
         self._ignored_addresses = []
+        self._stats = []
         
         libpydhcpserver.dhcp_network.DHCPNetwork.__init__(
          self, server_address, server_port, client_port, pxe_port
@@ -383,6 +388,7 @@ class _DHCPServer(libpydhcpserver.dhcp_network.DHCPNetwork):
                              pxe and pxe_options, vendor_options
                             ):
                                 self._sendDHCPPacket(packet, source_address, 'ACK', mac, s_ip, pxe)
+                                self._logDHCPACKPacket(mac, packet)
                             else:
                                 src.logging.writeLog('Ignoring %(mac)s per loadDHCPPacket()' % {
                                  'mac': mac,
@@ -413,6 +419,7 @@ class _DHCPServer(libpydhcpserver.dhcp_network.DHCPNetwork):
                          pxe and pxe_options, vendor_options
                         ):
                             self._sendDHCPPacket(packet, source_address, 'ACK', mac, s_ip, pxe)
+                            self._logDHCPACKPacket(mac, packet)
                         else:
                             src.logging.writeLog('Ignoring %(mac)s per loadDHCPPacket()' % {
                              'mac': mac,
@@ -453,6 +460,7 @@ class _DHCPServer(libpydhcpserver.dhcp_network.DHCPNetwork):
                              pxe and pxe_options, vendor_options
                             ):
                                 self._sendDHCPPacket(packet, (s_ciaddr, 0), 'ACK', mac, s_ciaddr, pxe)
+                                self._logDHCPACKPacket(mac, packet)
                             else:
                                 src.logging.writeLog('Ignoring %(mac)s per loadDHCPPacket()' % {
                                  'mac': mac,
@@ -662,6 +670,15 @@ class _DHCPServer(libpydhcpserver.dhcp_network.DHCPNetwork):
         if ntp_servers:
             if not packet.setOption('ntp_servers', ipsToList(ntp_servers)):
                 _logInvalidValue('ntp_servers', ntp_servers, subnet, serial)
+
+    def _logDHCPACKPacket(self, mac, packet):
+        ip = packet.getOption('yiaddr')
+        ip = '.'.join(map(str, ip))
+        lease = packet.getOption('ip_address_lease_time')
+        lease = lease[3]+(lease[2]*256)+(lease[1]*256*256)+(lease[0]*256*256*256)
+        self._stats_lock.acquire()
+        self._dhcp_assignments[mac] = [ip,lease,time.time()]
+        self._stats_lock.release()
                 
     def _logDHCPAccess(self, mac):
         """
@@ -678,11 +695,11 @@ class _DHCPServer(libpydhcpserver.dhcp_network.DHCPNetwork):
         if conf.ENABLE_SUSPEND:
             self._stats_lock.acquire()
             try:
-                assignments = self._dhcp_assignments.get(mac)
+                assignments = self._dhcp_accesses.get(mac)
                 if not assignments:
-                    self._dhcp_assignments[mac] = 1
+                    self._dhcp_accesses[mac] = 1
                 else:
-                    self._dhcp_assignments[mac] = assignments + 1
+                    self._dhcp_accesses[mac] = assignments + 1
                     if assignments + 1 > conf.SUSPEND_THRESHOLD:
                         src.logging.writeLog('%(mac)s issuing too many requests; ignoring for %(time)i seconds' % {
                          'mac': mac,
@@ -788,31 +805,62 @@ class _DHCPServer(libpydhcpserver.dhcp_network.DHCPNetwork):
             self._packets_processed += 1
             self._stats_lock.release()
             
-    def getStats(self):
+    def poll(self):
         """
-        Returns the performance statistics of all operations performed since the
+        Calculates statistics of all operations performed since the
         last polling event, resets all counters, and updates the time left before
         ignored MACs' requests will be processed again.
+
+        Returns an immutable copy of performance statistics of all operations performed
         """
         self._stats_lock.acquire()
         try:
             for i in range(len(self._ignored_addresses)):
                 self._ignored_addresses[i][1] -= conf.POLLING_INTERVAL
             self._ignored_addresses = [address for address in self._ignored_addresses if address[1] > 0]
-            
-            stats = (self._packets_processed, self._packets_discarded, self._time_taken, len(self._ignored_addresses))
-            
+
+            to_del = []
+            for k in self._dhcp_assignments:
+                self._dhcp_assignments[k][1] -= conf.POLLING_INTERVAL
+                if self._dhcp_assignments[k][1] < 0:
+                    to_del.append(k)
+            for k in to_del:
+                del self._dhcp_assignments[k]
+
+            self._stats = [(time.time(),
+                           self._packets_processed,
+                           self._packets_discarded,
+                           self._time_taken,
+                           len(self._ignored_addresses))] + self._stats[:conf.POLL_INTERVALS_TO_TRACK - 1]
+
             self._packets_processed = 0
             self._packets_discarded = 0
             self._time_taken = 0.0
             if conf.ENABLE_SUSPEND:
-                self._dhcp_assignments = {}
-                
-            return stats
+                self._dhcp_accesses = {}
         finally:
             self._stats_lock.release()
-            
-            
+
+    def getStats(self):
+        """
+        """
+        self._stats_lock.acquire()
+        val = tuple(self._stats)
+        self._stats_lock.release()
+        return val
+
+    def getAssignments(self):
+        """
+        Returns an immutable list 
+        """
+        self._stats_lock.acquire()
+        val = tuple((k,
+                     self._dhcp_assignments[k][0],
+                     self._dhcp_assignments[k][1],
+                     self._dhcp_assignments[k][2]) for k in self._dhcp_assignments)
+        self._stats_lock.release()
+        return val
+
 class DHCPService(threading.Thread):
     """
     A thread that handles DHCP requests indefinitely, daemonically.
@@ -854,12 +902,17 @@ class DHCPService(threading.Thread):
                 src.logging.writeLog('Suppressed non-fatal select() error in DHCP module')
             except Exception, e:
                 src.logging.sendErrorReport('Unhandled exception', e)
+
+    def getStats(self):
+        return self._dhcp_server.getStats()
+
+    def getAssignments(self):
+        return self._dhcp_server.getAssignments()
                 
-    def pollStats(self):
+    def poll(self):
         """
         Updates the performance statistics in the in-memory stats-log and
         implicitly updates the ignored MACs values.
         """
-        (processed, discarded, time_taken, ignored_macs) = self._dhcp_server.getStats()
-        src.logging.writePollRecord(processed, discarded, time_taken, ignored_macs)
-        
+        self._dhcp_server.poll()
+

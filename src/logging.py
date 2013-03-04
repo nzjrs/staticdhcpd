@@ -35,9 +35,6 @@ import conf_buffer as conf
 _LOG_LOCK = threading.Lock() #: A lock used to synchronize access to the memory-log.
 _LOG = [] #: The memory-log.
 
-_POLL_RECORDS_LOCK = threading.Lock() #: A lock used to synchronize access to the stats-log.
-_POLL_RECORDS = [] #: The stats-log.
-
 _EMAIL_LOCK = threading.Lock() #: A lock used to synchronize access to the e-mail routines.
 _EMAIL_TIMEOUT = 0 #: The number of seconds left before another e-mail can be sent.
 
@@ -76,45 +73,6 @@ def readLog():
         return tuple(_LOG)
     finally:
         _LOG_LOCK.release()
-        
-def writePollRecord(packets, discarded, time_taken, ignored_macs):
-    """
-    Adds statistics to the stats-log.
-    
-    @type packets: int
-    @param packets: The number of packets processed.
-    @type discarded: int
-    @param discarded: The number of processed packets that were discarded before
-        being fully processed.
-    @type time_taken: float
-    @param time_taken: The number of seconds spent handling all received,
-        non-ignored requests.
-    @type ignored_macs: int
-    @param ignored_macs: The number of MAC addresses being actively ignored.
-    """
-    global _POLL_RECORDS
-    
-    _POLL_RECORDS_LOCK.acquire()
-    try:
-        _POLL_RECORDS = [(time.time(), packets, discarded, time_taken, ignored_macs)] + _POLL_RECORDS[:conf.POLL_INTERVALS_TO_TRACK - 1]
-    finally:
-        _POLL_RECORDS_LOCK.release()
-        
-def readPollRecords():
-    """
-    Returns a static, immutable copy of the stats-log.
-    
-    @rtype: tuple
-    @return: A collection of
-        (timestamp:float, processed:int, discarded:int,
-        processing_time:float, ignored_macs:int) values, in reverse-chronological
-        order.
-    """
-    _POLL_RECORDS_LOCK.acquire()
-    try:
-        return tuple(_POLL_RECORDS)
-    finally:
-        _POLL_RECORDS_LOCK.release()
         
 #Logging functions
 def logToDisk():

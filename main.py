@@ -98,16 +98,16 @@ if __name__ == '__main__':
 	
     if conf.DAEMON:
         _daemonise()
-		
-    #Start Web server.
-    if conf.WEB_ENABLED:
-        web_thread = src.web.WebService()
-        web_thread.start()
-        
+
     #Start DHCP server.
     dhcp_thread = src.dhcp.DHCPService()
     dhcp_thread.start()
-    
+		
+    #Start Web server.
+    if conf.WEB_ENABLED:
+        web_thread = src.web.WebService(dhcp_thread)
+        web_thread.start()
+        
     #Record PID.
     try:
         pidfile = open(conf.PID_FILE, 'w')
@@ -139,7 +139,7 @@ if __name__ == '__main__':
         
         tick += 1
         if tick >= conf.POLLING_INTERVAL: #Perform periodic cleanup.
-            dhcp_thread.pollStats()
+            dhcp_thread.poll()
             src.logging.emailTimeoutCooldown()
             tick = 0
             

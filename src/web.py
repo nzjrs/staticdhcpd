@@ -114,9 +114,14 @@ class _WebServer(BaseHTTPServer.BaseHTTPRequestHandler):
             
             self.wfile.write('<html><head><title>%(name)s log</title></head><body>' % {'name': conf.SYSTEM_NAME,})
             self.wfile.write('<div style="width: 950px; margin-left: auto; margin-right: auto; border: 1px solid black;">')
-            
+
+            self.wfile.write('<div>Assignments:<div style="text-size: 0.9em; margin-left: 20px;">')
+            for (mac,ip,time_remaining,time_issued) in self.server.dhcp_service.getAssignments():
+                self.wfile.write("%s: %s (%s %.0fs remain)<br/>" % (time.ctime(time_issued),ip,mac,time_remaining))
+            self.wfile.write("</div></div><br/>")
+
             self.wfile.write('<div>Statistics:<div style="text-size: 0.9em; margin-left: 20px;">')
-            for (timestamp, packets, discarded, time_taken, ignored_macs) in src.logging.readPollRecords():
+            for (timestamp, packets, discarded, time_taken, ignored_macs) in self.server.dhcp_service.getStats():
                 if packets:
                     turnaround = time_taken / packets
                 else:
@@ -167,13 +172,13 @@ class _WebServer(BaseHTTPServer.BaseHTTPRequestHandler):
         """
         pass
         
-class WebService(threading.Thread):
+class WebService(threading.Thread, BaseHTTPServer.HTTPServer):
     """
     A thread that handles HTTP requests indefinitely, daemonically.
     """
     _web_server = None #: The handler that responds to HTTP requests.
     
-    def __init__(self):
+    def __init__(self, dhcp_thread):
         """
         Sets up the Web server.
         
@@ -182,17 +187,18 @@ class WebService(threading.Thread):
         """
         threading.Thread.__init__(self)
         self.daemon = True
-        
-        self._web_server = BaseHTTPServer.HTTPServer(
+
+        BaseHTTPServer.HTTPServer.__init__(self, 
          (
           '.'.join([str(int(o)) for o in conf.WEB_IP.split('.')]),
           int(conf.WEB_PORT)
          ),
          _WebServer
         )
-        
+        self.dhcp_service = dhcp_thread
+
         src.logging.writeLog('Configured Web server')
-        
+
     def run(self):
         """
         Runs the Web server indefinitely.
@@ -203,7 +209,7 @@ class WebService(threading.Thread):
         src.logging.writeLog('Running Web server')
         while True:
             try:
-                self._web_server.handle_request()
+                self.handle_request()
             except select.error:
                 src.logging.writeLog('Suppressed non-fatal select() error in Web module')
             except Exception, e:
