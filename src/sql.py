@@ -406,6 +406,8 @@ class _INIDB(object):
                     hostname = cfg.get(mac, "hostname")
                     if ip and hostname:
                         f.write("%s\t%s\n" % (ip,hostname))
+                        #FIXME FIXME FIXME FIXME
+                        f.write("%s\t%s.flycave\n" % (ip,hostname))
         if conf.INI_FILE_SIGNAL_PID:
             try:
                 pid = -1
